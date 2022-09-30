@@ -3,7 +3,7 @@ import express from 'express';
 import { format } from 'path';
 import { exit } from 'process';
 
-// import rateLimit from 'express-rate-limit';
+import rateLimit from 'express-rate-limit';
 
 import sqlite3 from 'sqlite3';
 import sessions from 'express-session';
@@ -55,7 +55,7 @@ process.on('unhandledRejection', (reason, p) => {
     console.log("Unhandled Rejection at: Promise ", p, " reason: ", reason);
 });
 
-// app.use(errorHandler({ dumpExceptions: true, showStack: true }));
+app.use(errorHandler());
 
 // JSON Body Parser Configuration
 app.use(bodyParser.urlencoded({
@@ -64,12 +64,12 @@ app.use(bodyParser.urlencoded({
 app.use(bodyParser.json());
 
 // // Request Throttler
-// app.set('trust proxy', 1);
-// const limiter = rateLimit({
-//     windowMs: 60 * 1000, // 1 minute
-//     max: 500 // limit each IP to 500 requests per windowMs (minute)
-// });
-// app.use(limiter);
+app.set('trust proxy', 1);
+const limiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 500 // limit each IP to 500 requests per windowMs (minute)
+});
+app.use(limiter);
 
 // Allow CORS
 app.use(function (req, res, next) {
