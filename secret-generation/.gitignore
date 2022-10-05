@@ -1,3 +1,1 @@
-secret-salt.txt
-users.txt
-ref-codes.txt
+*.secret

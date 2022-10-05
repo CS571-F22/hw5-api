@@ -4,16 +4,29 @@ import { format } from 'path';
 import { exit } from 'process';
 
 import rateLimit from 'express-rate-limit';
-
+import crypto from 'crypto';
 import sqlite3 from 'sqlite3';
 import sessions from 'express-session';
 import errorHandler from 'errorhandler';
 import morgan from 'morgan';
 
 import bodyParser from 'body-parser';
+import { readFileSync } from 'fs';
 
 const app = express();
-const port = 56933;
+const port = 56935;
+
+const SESSION_SECRET = readFileSync("C:/Users/ColeNelson/Desktop/cs571-git/homework/apis/hw5-api/secret-generation/session-secret.secret").toString()
+const REFCODE_ASSOCIATIONS = Object.fromEntries(readFileSync("C:/Users/ColeNelson/Desktop/cs571-git/homework/apis/hw5-api/secret-generation/ref-codes.secret")
+    .toString().split(/\r?\n/g).map(assoc => {
+        const assocArr = assoc.split(',');
+        return [assocArr[1], assocArr[0]]
+    }))
+const INIT_SQL = readFileSync("C:/Users/ColeNelson/Desktop/cs571-git/homework/apis/hw5-api/includes/init.sql").toString();
+
+const REGISTER_SELECT_SQL = 'SELECT * FROM BadgerUser WHERE username = ?;'
+const REGISTER_SQL = "INSERT INTO BadgerUser(username, passwd, salt, refCode, wiscUsername) VALUES(?, ?, ?, ?, ?);";
+const POST_SQL = "INSERT INTO BadgerMessage(title, content) VALUES (?, ?);"
 
 const db = await new sqlite3.Database("./db.db",
     sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
@@ -26,19 +39,8 @@ const db = await new sqlite3.Database("./db.db",
         }
     });
 db.serialize(() => {
-    db.run("CREATE TABLE lorem (info TEXT)");
-
-    const stmt = db.prepare("INSERT INTO lorem VALUES (?)");
-    for (let i = 0; i < 10; i++) {
-        stmt.run("Ipsum " + i);
-    }
-    stmt.finalize();
-
-    db.each("SELECT rowid AS id, info FROM lorem", (err: any, row: any) => {
-        console.log(row.id + ": " + row.info);
-    });
+    INIT_SQL.replaceAll(/\t\r\n/g, ' ').split(';').filter(str => str).forEach((stmt) => db.run(stmt + ';'));
 });
-db.close();
 
 app.use(morgan(':date ":method :url" :status :res[content-length] - :response-time ms'));
 
@@ -79,7 +81,7 @@ app.use(function (req, res, next) {
 });
 
 app.use(sessions({
-    secret: "thisismysecrctekeyfhrgfgrfrty84fwir767",
+    secret: SESSION_SECRET,
     saveUninitialized: true,
     cookie: { maxAge: 1000 * 60 * 60 * 24 },
     resave: false
@@ -89,6 +91,62 @@ app.post('/api/register', (req, res) => {
     const username = req.body.username;
     const password = req.body.password;
     const refCode = req.body.refCode;
+    if (username && password && refCode) {
+        if (refCode in REFCODE_ASSOCIATIONS) {
+            db.prepare(REGISTER_SELECT_SQL).run(username).all((err, rows) => {
+                if (err) {
+                    res.status(500).send({
+                        msg: "The operation failed. The error is provided below. This may be server malfunction; check that your request is valid, otherwise contact CS571 staff.",
+                        error: err
+                    });
+                } else if (rows.length === 1) {
+                    res.status(409).send({
+                        msg: "The user already exists!",
+                    });
+                } else {
+                    const salt = crypto.createHash('sha256').update(new Date().getTime().toString()).digest('hex');
+                    const hashPass = crypto.createHmac('sha256', salt).update(password).digest('hex');
+                    const wiscRef = REFCODE_ASSOCIATIONS[refCode];
+                    db.prepare(REGISTER_SQL).run(username, hashPass, salt, refCode, wiscRef, (err: any) => {
+                        if (err) {
+                            res.status(500).send({
+                                msg: "The operation failed. The error is provided below. This may be server malfunction; check that your request is valid, otherwise contact CS571 staff.",
+                                error: err
+                            });
+                        } else {
+                            db.prepare(REGISTER_SELECT_SQL).run(username).all((err, rows) => {
+                                if (!err && rows.length === 1) {
+                                    res.status(200).send({
+                                        msg: "Successfully created user!",
+                                        user: (({ id, username }) => ({ id, username }))(rows[0])
+                                    });
+                                } else {
+                                    res.status(500).send({
+                                        msg: "The operation failed. The error is provided below. This may be server malfunction; check that your request is valid, otherwise contact CS571 staff.",
+                                        error: err
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        } else {
+            if (refCode.startsWith('bid_')) {
+                res.status(401).send({
+                    msg: 'An invalid refCode was provided.'
+                });
+            } else {
+                res.status(401).send({
+                    msg: 'An invalid refCode was provided. Did you forget to include \'bid_\'?'
+                });
+            }
+        }
+    } else {
+        res.status(400).send({
+            msg: 'A request must contain a \'username\', \'password\', and \'refCode\''
+        });
+    }
 });
 
 app.post('/api/login', (req, res) => {
@@ -115,6 +173,7 @@ app.post('/api/chatroom/:chatroomName/messages', (req, res) => {
 
 // Error Handling
 app.use((err: any, req: any, res: any, next: any) => {
+    console.log(err)
     let datetime: Date = new Date();
     let datetimeStr: string = `${datetime.toLocaleDateString()} ${datetime.toLocaleTimeString()}`;
     console.log(`${datetimeStr}: Encountered an error processing ${JSON.stringify(req.body)}`);
