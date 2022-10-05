@@ -28,6 +28,8 @@ const REGISTER_SELECT_SQL = 'SELECT * FROM BadgerUser WHERE username = ?;'
 const REGISTER_SQL = "INSERT INTO BadgerUser(username, passwd, salt, refCode, wiscUsername) VALUES(?, ?, ?, ?, ?);";
 const POST_SQL = "INSERT INTO BadgerMessage(title, content) VALUES (?, ?);"
 
+const CHATROOM_NAMES = ["Arboretum", "Capitol", "Chazen", "Epic", "HenryVilas", "MemorialTerrace", "Mendota",  "Olbrich"]
+
 const db = await new sqlite3.Database("./db.db",
     sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
     (err: any) => {
@@ -120,6 +122,7 @@ app.post('/api/register', (req, res) => {
                                         msg: "Successfully created user!",
                                         user: (({ id, username }) => ({ id, username }))(rows[0])
                                     });
+                                    // TODO Send set-cookie header??
                                 } else {
                                     res.status(500).send({
                                         msg: "The operation failed. The error is provided below. This may be server malfunction; check that your request is valid, otherwise contact CS571 staff.",
@@ -152,23 +155,57 @@ app.post('/api/register', (req, res) => {
 app.post('/api/login', (req, res) => {
     const username = req.body.username;
     const password = req.body.password;
+
+    if(username && password) {
+        // TODO Send set-cookie header
+    } else {
+        res.status(400).send({
+            msg: 'A request must contain a \'username\' and \'password\''
+        })
+    }
 });
 
 app.post('/api/logout', (req: any, res) => {
     req.session.destroy();
+    // TODO Send blank set-cookie header
+    res.status(200).send({
+        msg: "Successfully logged out!"
+    });
 });
 
 app.get('/api/chatrooms', (req, res) => {
-
+    res.status(200).send(CHATROOM_NAMES);
 });
 
 app.get('/api/chatroom/:chatroomName/messages', (req, res) => {
+    const chatroomName = req.params.chatroomName;
+    if(chatroomName in CHATROOM_NAMES) {
 
+    } else {
+        res.status(400).send({
+            msg: "The specified chatroom does not exist. Chatroom names are case-sensitive."
+        })
+    }
 });
 
 app.post('/api/chatroom/:chatroomName/messages', (req, res) => {
     const title = req.body.title;
     const content = req.body.content;
+
+    const chatroomName = req.params.chatroomName;
+    if(chatroomName in CHATROOM_NAMES) {
+        if(title && content) {
+
+        } else {
+            res.status(400).send({
+                msg: 'A request must contain a \'title\' and \'content\''
+            })
+        }
+    } else {
+        res.status(400).send({
+            msg: "The specified chatroom does not exist. Chatroom names are case-sensitive."
+        })
+    }
 });
 
 // Error Handling

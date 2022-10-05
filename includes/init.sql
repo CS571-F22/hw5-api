@@ -7,20 +7,18 @@ CREATE TABLE IF NOT EXISTS BadgerUser (
 	wiscUsername TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS BadgerChatroom (
-	id INTEGER PRIMARY KEY UNIQUE,
-	roomName TEXT NOT NULL UNIQUE
-);
-
 CREATE TABLE IF NOT EXISTS BadgerMessage (
 	id INTEGER PRIMARY KEY UNIQUE,
 	title TEXT NOT NULL,
-	content TEXT NOT NULL
+	content TEXT NOT NULL,
+	chatroom TEXT NOT NULL
 );
 
-INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("alpha");
-INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("beta");
-INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("charlie");
-INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("delta");
-INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("echo");
-INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("foxtrot");
+INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("Arboretum");
+INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("Capitol");
+INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("Chazen");
+INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("Epic");
+INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("HenryVilas");
+INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("MemorialTerrace");
+INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("Mendota");
+INSERT OR IGNORE INTO BadgerChatroom(roomName) VALUES("Olbrich");
