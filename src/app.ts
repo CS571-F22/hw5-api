@@ -27,11 +27,11 @@ import { readFileSync } from 'fs';
 const app = express();
 const port = 56935;
 
-const COLE_LOCAL = true;
-const FS_DB = COLE_LOCAL ? "./db.db" : "/cs571/f22/hw5/db.db";
-const FS_SESSION_SECRT = COLE_LOCAL ? "C:/Users/ColeNelson/Desktop/cs571-git/homework/apis/hw5-api/secret-generation/session-secret.secret" : "/cs571/f22/hw5/session-secret.secret";
-const FS_REFCODE_ASSOCIATIONS = COLE_LOCAL ? "C:/Users/ColeNelson/Desktop/cs571-git/homework/apis/hw5-api/secret-generation/ref-codes.secret" : "/cs571/f22/hw5/ref-codes.secret";
-const FS_INIT_SQL = COLE_LOCAL ? "C:/Users/ColeNelson/Desktop/cs571-git/homework/apis/hw5-api/includes/init.sql" : "/cs571/f22/hw5/init.sql";
+const COLE_LOCAL = false;
+const FS_DB = COLE_LOCAL ? "./db.db" : "/secrets/db.db";
+const FS_SESSION_SECRT = COLE_LOCAL ? "C:/Users/ColeNelson/Desktop/cs571-git/homework/apis/hw5-api/secret-generation/session-secret.secret" : "/secrets/session-secret.secret";
+const FS_REFCODE_ASSOCIATIONS = COLE_LOCAL ? "C:/Users/ColeNelson/Desktop/cs571-git/homework/apis/hw5-api/secret-generation/ref-codes.secret" : "/secrets/ref-codes.secret";
+const FS_INIT_SQL = COLE_LOCAL ? "C:/Users/ColeNelson/Desktop/cs571-git/homework/apis/hw5-api/includes/init.sql" : "/secrets/init.sql";
 
 const SESSION_SECRET = readFileSync(FS_SESSION_SECRT).toString()
 const REFCODE_ASSOCIATIONS = Object.fromEntries(readFileSync(FS_REFCODE_ASSOCIATIONS)
@@ -93,15 +93,17 @@ app.use(limiter);
 
 // Allow CORS
 app.use(function (req, res, next) {
-    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Origin", "http://localhost:3000");
+    res.header("Access-Control-Allow-Credentials", "true");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header('Access-Control-Allow-Methods', 'GET,POST,DELETE,PUT,OPTIONS');
     next();
 });
 
 app.use(sessions({
     secret: SESSION_SECRET,
     saveUninitialized: true,
-    cookie: { maxAge: 1000 * 60 * 60 * 24 },
+    cookie: { maxAge: 1000 * 60 * 60 * 24,  httpOnly: false },
     resave: false
 }));
 
@@ -139,6 +141,7 @@ app.post('/api/register', (req, res) => {
                                         req.session.user = idAndUsername;
                                         res.status(200).send({
                                             msg: "Successfully created user!",
+                                            session: req.session.id,
                                             user: idAndUsername
                                         });
                                     } else {
@@ -200,6 +203,7 @@ app.post('/api/login', (req, res) => {
                     req.session.user = (({ id, username }) => ({ id, username }))(dbUser)
                     res.status(200).send({
                         msg: "Successfully authenticated.",
+                        session: req.session.id
                     });
                 } else {
                     res.status(401).send({
@@ -215,6 +219,18 @@ app.post('/api/login', (req, res) => {
     }
 });
 
+app.get('/api/status', (req: any, res) => {
+    if (req.session.user) {
+        res.status(200).send({
+            loggedIn: true
+        });
+    } else {
+        res.status(200).send({
+            loggedIn: false
+        });
+    }
+});
+
 app.post('/api/logout', (req: any, res) => {
     req.session.destroy(() => {
         res.status(200).send({
@@ -223,7 +239,7 @@ app.post('/api/logout', (req: any, res) => {
     });
 });
 
-app.get('/api/chatrooms', (req, res) => {
+app.get('/api/chatroom', (req, res) => {
     res.status(200).send(CHATROOM_NAMES);
 });
 
