@@ -3,23 +3,13 @@ import express from 'express';
 import { format } from 'path';
 import { exit } from 'process';
 
+import jwt from 'jsonwebtoken';
+
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import sqlite3 from 'sqlite3';
-import sessions from 'express-session';
 import errorHandler from 'errorhandler';
 import morgan from 'morgan';
-
-import session from 'express-session';
-
-declare module 'express-session' {
-    export interface SessionData {
-        user: {
-            id: string,
-            username: string
-        };
-    }
-}
 
 import bodyParser from 'body-parser';
 import { readFileSync } from 'fs';
@@ -47,6 +37,31 @@ const GET_POSTS_SQL = "SELECT * From BadgerMessage WHERE chatroom = ? ORDER BY i
 const POST_SQL = "INSERT INTO BadgerMessage(poster, title, content, chatroom) VALUES (?, ?, ?, ?);"
 
 const CHATROOM_NAMES = ["Arboretum", "Capitol", "Chazen", "Epic", "HenryVilas", "MemorialTerrace", "Mendota", "Olbrich"]
+
+function generateAccessToken(tokenBody: any) {
+    return jwt.sign(tokenBody, SESSION_SECRET, { expiresIn: '3600s' });
+}
+
+function authenticateToken(req: any, res: any, next: any) {
+    const authHeader = req.headers['authorization']
+    const token = authHeader && authHeader.split(' ')[1]
+
+    if (token) {
+        jwt.verify(token, SESSION_SECRET as string, (err: any, user: any) => {
+            if (err) {
+                return res.status(401).send({
+                    msg: "You must be logged in to make a post!"
+                });
+            }
+            req.user = user
+            next()
+        })
+    } else {
+        return res.status(401).send({
+            msg: "Missing \'Authorization\' header. Did you forget to prefix with \'Bearer\'?"
+        });
+    }
+}
 
 const db = await new sqlite3.Database(FS_DB, sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err: any) => {
     if (err) {
@@ -93,19 +108,11 @@ app.use(limiter);
 
 // Allow CORS
 app.use(function (req, res, next) {
-    res.header("Access-Control-Allow-Origin", "http://localhost:3000");
-    res.header("Access-Control-Allow-Credentials", "true");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
     res.header('Access-Control-Allow-Methods', 'GET,POST,DELETE,PUT,OPTIONS');
     next();
 });
-
-app.use(sessions({
-    secret: SESSION_SECRET,
-    saveUninitialized: true,
-    cookie: { maxAge: 1000 * 60 * 60 * 24,  httpOnly: false },
-    resave: false
-}));
 
 app.post('/api/register', (req, res) => {
     const username = req.body.username;
@@ -138,10 +145,10 @@ app.post('/api/register', (req, res) => {
                                 db.prepare(EXISTS_SQL).run(username).all((err, rows) => {
                                     if (!err && rows.length === 1) {
                                         const idAndUsername = (({ id, username }) => ({ id, username }))(rows[0]);
-                                        req.session.user = idAndUsername;
+                                        const jwtToken = generateAccessToken(idAndUsername);
                                         res.status(200).send({
                                             msg: "Successfully created user!",
-                                            session: req.session.id,
+                                            token: jwtToken,
                                             user: idAndUsername
                                         });
                                     } else {
@@ -200,10 +207,11 @@ app.post('/api/login', (req, res) => {
                 const dbSalt = dbUser.salt;
                 const guessPass = crypto.createHmac('sha256', dbSalt).update(password).digest('hex');
                 if (guessPass === dbPass) {
-                    req.session.user = (({ id, username }) => ({ id, username }))(dbUser)
+                    const idAndUsername = (({ id, username }) => ({ id, username }))(dbUser);
+                    const jwtToken = generateAccessToken(idAndUsername);
                     res.status(200).send({
                         msg: "Successfully authenticated.",
-                        session: req.session.id
+                        token: jwtToken
                     });
                 } else {
                     res.status(401).send({
@@ -217,26 +225,6 @@ app.post('/api/login', (req, res) => {
             msg: 'A request must contain a \'username\' and \'password\''
         })
     }
-});
-
-app.get('/api/status', (req: any, res) => {
-    if (req.session.user) {
-        res.status(200).send({
-            loggedIn: true
-        });
-    } else {
-        res.status(200).send({
-            loggedIn: false
-        });
-    }
-});
-
-app.post('/api/logout', (req: any, res) => {
-    req.session.destroy(() => {
-        res.status(200).send({
-            msg: "Successfully logged out!"
-        });
-    });
 });
 
 app.get('/api/chatroom', (req, res) => {
@@ -266,40 +254,34 @@ app.get('/api/chatroom/:chatroomName/messages', (req, res) => {
     }
 });
 
-app.post('/api/chatroom/:chatroomName/messages', (req, res) => {
+app.post('/api/chatroom/:chatroomName/messages', authenticateToken, (req: any, res) => {
     const title = req.body.title;
     const content = req.body.content;
     const chatroomName = req.params.chatroomName;
 
     if (CHATROOM_NAMES.includes(chatroomName)) {
-        if (req.session.user) {
-            if (title && content) {
-                if (title.length <= 128 && content.length <= 1024) {
-                    db.prepare(POST_SQL).run(req.session.user.username, title, content, chatroomName, (err: any) => {
-                        if (!err) {
-                            res.status(200).send({
-                                msg: "Successfully posted message!"
-                            });
-                        } else {
-                            res.status(500).send({
-                                msg: "The operation failed. The error is provided below. This may be server malfunction; check that your request is valid, otherwise contact CS571 staff.",
-                                error: err
-                            });
-                        }
-                    });
-                } else {
-                    res.status(413).send({
-                        msg: '\'title\' must be 128 characters or fewer and \'content\' must be 1024 characters or fewer'
-                    })
-                }
+        if (title && content) {
+            if (title.length <= 128 && content.length <= 1024) {
+                db.prepare(POST_SQL).run(req.user.username, title, content, chatroomName, (err: any) => {
+                    if (!err) {
+                        res.status(200).send({
+                            msg: "Successfully posted message!"
+                        });
+                    } else {
+                        res.status(500).send({
+                            msg: "The operation failed. The error is provided below. This may be server malfunction; check that your request is valid, otherwise contact CS571 staff.",
+                            error: err
+                        });
+                    }
+                });
             } else {
-                res.status(400).send({
-                    msg: 'A request must contain a \'title\' and \'content\''
+                res.status(413).send({
+                    msg: '\'title\' must be 128 characters or fewer and \'content\' must be 1024 characters or fewer'
                 })
             }
         } else {
-            res.status(401).send({
-                msg: "You must be logged in to make a post!"
+            res.status(400).send({
+                msg: 'A request must contain a \'title\' and \'content\''
             })
         }
     } else {
@@ -315,7 +297,7 @@ app.use((err: any, req: any, res: any, next: any) => {
     let datetime: Date = new Date();
     let datetimeStr: string = `${datetime.toLocaleDateString()} ${datetime.toLocaleTimeString()}`;
     console.log(`${datetimeStr}: Encountered an error processing ${JSON.stringify(req.body)}`);
-    res.status(400).send({
+    res.status(500).send({
         "error-msg": "Oops! Something went wrong. Check to make sure that you are sending a valid request. Your recieved request is provided below. If it is empty, then it was most likely not provided or malformed. If you have verified that your request is valid, please contact the CS571 staff.",
         "error-req": JSON.stringify(req.body),
         "date-time": datetimeStr

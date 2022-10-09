@@ -1,5 +1,5 @@
 {
-  "name": "cs571-f22-hw2-api",
+  "name": "cs571-f22-hw5-api",
   "version": "1.0.0",
   "description": "",
   "main": "app.js",
@@ -11,24 +11,25 @@
   "license": "ISC",
   "dependencies": {
     "@faker-js/faker": "^7.5.0",
-    "@types/express": "^4.17.7",
-    "@types/node": "^14.14.10",
     "body-parser": "^1.20.0",
     "cookie-parser": "^1.4.6",
     "errorhandler": "^1.5.1",
     "express": "^4.18.1",
     "express-rate-limit": "^6.6.0",
-    "express-session": "^1.17.3",
+    "jsonwebtoken": "^8.5.1",
     "morgan": "^1.10.0",
     "sqlite3": "^5.1.1",
-    "typescript": "^4.8.2",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
     "@types/errorhandler": "^1.5.0",
+    "@types/express": "^4.17.7",
     "@types/express-session": "^1.17.5",
+    "@types/jsonwebtoken": "^8.5.9",
     "@types/morgan": "^1.9.3",
+    "@types/node": "^14.14.10",
     "@types/sqlite3": "^3.1.8",
-    "@types/uuid": "^8.3.4"
+    "@types/uuid": "^8.3.4",
+    "typescript": "^4.8.2"
   }
 }
