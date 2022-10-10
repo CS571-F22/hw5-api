@@ -31,10 +31,12 @@ const REFCODE_ASSOCIATIONS = Object.fromEntries(readFileSync(FS_REFCODE_ASSOCIAT
     }))
 const INIT_SQL = readFileSync(FS_INIT_SQL).toString();
 
-const EXISTS_SQL = 'SELECT * FROM BadgerUser WHERE username = ?;'
+const EXISTS_POST_SQL = 'SELECT * FROM BadgerMessage WHERE chatroom = ? AND id = ?;'
+const EXISTS_USER_SQL = 'SELECT * FROM BadgerUser WHERE username = ?;'
 const REGISTER_SQL = "INSERT INTO BadgerUser(username, passwd, salt, refCode, wiscUsername) VALUES(?, ?, ?, ?, ?);";
 const GET_POSTS_SQL = "SELECT * From BadgerMessage WHERE chatroom = ? ORDER BY id DESC LIMIT 25;"
-const POST_SQL = "INSERT INTO BadgerMessage(poster, title, content, chatroom) VALUES (?, ?, ?, ?);"
+const POST_SQL = "INSERT INTO BadgerMessage(poster, title, content, chatroom) VALUES (?, ?, ?, ?) RETURNING id;"
+const DELETE_POST_SQL = "DELETE FROM BadgerMessage WHERE id = ?;"
 
 const CHATROOM_NAMES = ["Arboretum", "Capitol", "Chazen", "Epic", "HenryVilas", "MemorialTerrace", "Mendota", "Olbrich"]
 
@@ -121,7 +123,7 @@ app.post('/api/register', (req, res) => {
     if (username && password && refCode) {
         if (refCode in REFCODE_ASSOCIATIONS) {
             if (username.length <= 64 && password.length <= 128) {
-                db.prepare(EXISTS_SQL).run(username).all((err, rows) => {
+                db.prepare(EXISTS_USER_SQL).run(username).all((err, rows) => {
                     if (err) {
                         res.status(500).send({
                             msg: "The operation failed. The error is provided below. This may be server malfunction; check that your request is valid, otherwise contact CS571 staff.",
@@ -142,7 +144,7 @@ app.post('/api/register', (req, res) => {
                                     error: err
                                 });
                             } else {
-                                db.prepare(EXISTS_SQL).run(username).all((err, rows) => {
+                                db.prepare(EXISTS_USER_SQL).run(username).all((err, rows) => {
                                     if (!err && rows.length === 1) {
                                         const idAndUsername = (({ id, username }) => ({ id, username }))(rows[0]);
                                         const jwtToken = generateAccessToken(idAndUsername);
@@ -190,7 +192,7 @@ app.post('/api/login', (req, res) => {
     const password = req.body.password;
 
     if (username && password) {
-        db.prepare(EXISTS_SQL).run(username).all((err, rows) => {
+        db.prepare(EXISTS_USER_SQL).run(username).all((err, rows) => {
             if (err) {
                 res.status(500).send({
                     msg: "The operation failed. The error is provided below. This may be server malfunction; check that your request is valid, otherwise contact CS571 staff.",
@@ -262,10 +264,11 @@ app.post('/api/chatroom/:chatroomName/messages', authenticateToken, (req: any, r
     if (CHATROOM_NAMES.includes(chatroomName)) {
         if (title && content) {
             if (title.length <= 128 && content.length <= 1024) {
-                db.prepare(POST_SQL).run(req.user.username, title, content, chatroomName, (err: any) => {
+                db.prepare(POST_SQL).get(req.user.username, title, content, chatroomName, (err: any, resp: any) => {
                     if (!err) {
                         res.status(200).send({
-                            msg: "Successfully posted message!"
+                            msg: "Successfully posted message!",
+                            id: resp.id
                         });
                     } else {
                         res.status(500).send({
@@ -284,6 +287,47 @@ app.post('/api/chatroom/:chatroomName/messages', authenticateToken, (req: any, r
                 msg: 'A request must contain a \'title\' and \'content\''
             })
         }
+    } else {
+        res.status(404).send({
+            msg: "The specified chatroom does not exist. Chatroom names are case-sensitive."
+        })
+    }
+});
+
+app.delete('/api/chatroom/:chatroomName/messages/:messageId', authenticateToken, (req: any, res) => {
+    const chatroomName = req.params.chatroomName;
+    const messageId = req.params.messageId;
+
+    if (CHATROOM_NAMES.includes(chatroomName)) {
+        db.prepare(EXISTS_POST_SQL).run(chatroomName, messageId).all((err, rows) => {
+            if (err) {
+                res.status(500).send({
+                    msg: "The operation failed. The error is provided below. This may be server malfunction; check that your request is valid, otherwise contact CS571 staff.",
+                    error: err
+                });
+            } else if (rows.length === 0) {
+                res.status(404).send({
+                    msg: "That message does not exist!"
+                });
+            } else if (req.user.username !== rows[0].poster){
+                res.status(401).send({
+                    msg: "You may not delete another user's post!"
+                });
+            } else {
+                db.prepare(DELETE_POST_SQL).run(messageId, (err: any) => {
+                    if (!err) {
+                        res.status(200).send({
+                            msg: "Successfully deleted message!"
+                        });
+                    } else {
+                        res.status(500).send({
+                            msg: "The operation failed. The error is provided below. This may be server malfunction; check that your request is valid, otherwise contact CS571 staff.",
+                            error: err
+                        });
+                    }
+                });
+            }
+        });
     } else {
         res.status(404).send({
             msg: "The specified chatroom does not exist. Chatroom names are case-sensitive."

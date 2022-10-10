@@ -9,6 +9,7 @@ All routes are relative to `https://www.coletnelson.us/cs571/f22/hw5/api/`
 | `GET`| `/chatroom` | Get all chatrooms. | 200, 304 |
 | `GET` | `/chatroom/:chatroomName/messages`| Get latest 25 messages for specified chatroom. | 200, 304, 404 |
 | `POST` | `/chatroom/:chatroomName/messages` | Posts a message to the specified chatroom. Requires JWT. | 200, 400, 404, 413 |
+| `DELETE` | `/chatroom/:chatroomName/messages/:messageId` | Deletes the given message. Requires JWT. | 200, 400, 401, 404 |
 | `POST` | `/register` | Registers a user account and returns a JWT. | 200, 400, 401, 409, 413  |
 | `POST` | `/login` | Logs a user in, returning a JWT. | 200, 400, 401, 404 |
 
@@ -246,5 +247,63 @@ If the `title` is longer than 128 characters or if the `content` is longer than 
 ```json
 {
     "msg": "'title' must be 128 characters or fewer and 'content' must be 1024 characters or fewer"
+}
+```
+
+### Deleting a Message
+`DELETE` `https://www.coletnelson.us/cs571/f22/hw5/api/chatroom/:chatroomName/messages/:messageId`
+
+Deleting a message is a protected operation; you must have a JWT from the login or register endpoint. The `:chatroomName` and `:messageId` must be specified in the URL.
+
+Request headers must include `Authorization: Bearer :JWT` where `:JWT` is your JWT.
+
+There is no request body for this request.
+
+If the delete is successful, the following `200` will be sent...
+
+```json
+{
+    "msg": "Successfully deleted message!"
+}
+```
+
+If you forget to provide a JWT, the following `401` will be sent...
+
+```json
+{
+    "msg": "Missing 'Authorization' header."
+}
+```
+
+If the JWT you provide is invalid (such as malformed or expired), the following `401` will be sent...
+
+```json
+{
+    "msg": "You must be logged in to make a post!"
+}
+```
+
+If you try to delete another user's post, the following `401` will be sent...
+
+```json
+{
+    "msg": "You may not delete another user's post!"
+}
+```
+
+
+If a chatroom is specified that does not exist, a `404` will be returned.
+
+```json
+{
+    "msg": "The specified chatroom does not exist. Chatroom names are case-sensitive."
+}
+```
+
+If a message is specified that does not exist, a `404` will be returned.
+
+```json
+{
+    "msg": "That message does not exist!"
 }
 ```
