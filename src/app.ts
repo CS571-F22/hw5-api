@@ -103,8 +103,8 @@ app.use(bodyParser.json());
 // // Request Throttler
 app.set('trust proxy', 1);
 const limiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: 100 // limit each IP to 100 requests per windowMs (minute)
+    windowMs: 30 * 1000, // 1/2 minute
+    max: 1000 // limit each IP to 1000 requests per windowMs (1/2 minute)
 });
 app.use(limiter);
 
